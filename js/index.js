@@ -161,7 +161,6 @@ Bullet.prototype = {
 		this.die = true;
 	},control : function(){
 		this.updataArea();
-		//console.log(this.size);
 		if( this.health > 0 ){
 			this.shape.destY -= this.speed;
 		}else{
