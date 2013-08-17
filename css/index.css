@@ -1,0 +1,36 @@
+canvas{
+	display: block;
+}
+*{
+	padding: 0;
+	margin: 0;
+}
+
+#score{
+	left: 0;
+	top: 0;
+	padding: 10px;
+	position: absolute;
+	height: 20px;
+	width: 100px;
+	color: #747879;
+	font-size: 32px;
+	line-height: 100%;
+	font-family: 'DIN Next W01 Bold';
+}
+
+#begin{
+	left: 192px;
+	top: 404px;
+	position: absolute;
+	background: #747879;
+	padding: 10px;
+	border-radius: 3px;
+	color: #fff;
+	text-decoration: none;
+}
+
+@font-face{
+	font-family:"DIN Next W01 Bold";
+	src:url("font.woff") format('woff');
+}
