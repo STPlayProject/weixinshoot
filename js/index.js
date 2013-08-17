@@ -30,6 +30,7 @@ Array.prototype.deepClone = function(){
 	}
 	return arr;
 };
+
 Array.prototype.del = function(n){
 	if(n<0){
 		return this;
