@@ -30,7 +30,6 @@ Array.prototype.deepClone = function(){
 	}
 	return arr;
 };
-
 Array.prototype.del = function(n){
 	if(n<0){
 		return this;
@@ -57,6 +56,9 @@ var Aircraft = function(init){
 	if( !this.attack ){
 		this.loadWeapon();
 	}
+	this.fly = this.fly();
+	this.damage = this.damage();
+	this.destroy = this.destroy();
 };
 Aircraft.prototype = {
 	health : 0,
@@ -64,7 +66,14 @@ Aircraft.prototype = {
 	score : 0,
 	die : false,
 	checkArea : true,
-	loadWeapon : function(){
+	animateType : 'fly',
+	fly : function(){
+		return function(){};
+	},damage : function(){
+		return function(){};
+	},destroy : function(){
+		return function(){};
+	},loadWeapon : function(){
 		this.attack = new Weapon(this.weapon,this);
 	},remove : function(){
 		if( this.shape.destY > 1000 ){
@@ -73,14 +82,23 @@ Aircraft.prototype = {
 		return this.die;
 	},control : function(){
 		this.updataArea();
-		//console.log(this.area);
-		if( this.health > 0 ){
-			this.fly();
+		if( !this.isDied() ){
 			this.shape.destY += this.speed;
-		}else{
-			this.checkArea = false;
-			this.destroy();
 		}
+		this[this.animateType].call(this);
+		return null;
+	},isDied : function(){
+		if( this.health > 0 ){
+			return false;
+		}else{
+			this.animateType = 'destroy';
+			this.checkArea = false;
+			return true;
+		}
+	},getDamage : function( attack ){
+		this.health -= attack;
+		this.animateType = 'damage';
+		return this;
 	},updataArea : function(){
 		var x = (this.shape.destWidth - this.size[0])/2,
 			y = (this.shape.destHeight - this.size[1])/2;
@@ -143,7 +161,6 @@ Weapon.prototype = {
 		this.bulletSum = Infinity;
 	}
 };
-
 var Bullet = function( init ){
 	for( var key in init ){
 		this[key] = init[key];
@@ -158,6 +175,7 @@ Bullet.prototype = {
 	die : false,
 	checkArea : true,
 	fly : function(){},
+	damage : function(){},
 	destroy : function(){
 		this.die = true;
 	},control : function(){
@@ -169,6 +187,9 @@ Bullet.prototype = {
 			this.destroy();
 		}
 		return null;
+	},getDamage : function( attack ){
+		this.health -= attack;
+		return this;
 	},remove : function(){
 		if( this.shape.destY < 0 ){
 			this.die = true;
@@ -256,7 +277,7 @@ GameControl.prototype = {
 		while( i < sum ){
 			if( enemyControlList[i]['remove']() ){
 				this.score += enemyControlList[i].score;
-				this.enemyControlList = enemyControlList.del(i);
+				enemyControlList = enemyControlList.del(i);
 				sum -= 1;
 				if( i >= sum ){
 					break;
@@ -267,11 +288,13 @@ GameControl.prototype = {
 			++i;
 		}
 
+		this.enemyControlList = enemyControlList;
+
 		i = 0 , sum = bulletControlList.length;
 
 		while( i < sum ){
 			if( bulletControlList[i]['remove']() ){
-				this.bulletControlList = bulletControlList.del(i);
+				bulletControlList = bulletControlList.del(i);
 				sum -= 1;
 				if( i >= sum ){
 					break;
@@ -281,6 +304,7 @@ GameControl.prototype = {
 			bulletControlList[i]['control']();
 			++i;
 		}
+		this.bulletControlList = bulletControlList;
 		
 		this.cheakDistance();
 		this.addEnemy();
@@ -294,7 +318,7 @@ GameControl.prototype = {
 
 		for( i = 0 , sumi = eAList.length ; i < sumi ; ++i ){
 			if( player.checkArea && eAList[i].checkArea && this.checkOverlap( player.area , eAList[i].area ) ){
-				this.addDamage( player , eAList[i].attack );
+				player.getDamage( eAList[i].attack );
 			}
 		}
 
@@ -303,8 +327,8 @@ GameControl.prototype = {
 		for( i = 0 , sumi = eAList.length ; i < sumi ; ++i ){
 			for( j = 0 , sumj = bAList.length ; j < sumj ; ++j ){
 				if( eAList[i].checkArea && bAList[j].checkArea && this.checkOverlap( eAList[i].area , bAList[j].area ) ){
-					this.addDamage( eAList[i] , bAList[j].attack );
-					this.addDamage( bAList[j] , eAList[i].attack );
+					eAList[i].getDamage(bAList[j].attack);
+					bAList[j].getDamage(eAList[i].attack);
 				}
 			}
 		}
@@ -313,7 +337,7 @@ GameControl.prototype = {
 				enemy,
 				i,
 				sum;
-		if( Math.random() < 0.01 ){
+		if( Math.random() < 0.03 ){
 			for( i = 0 , sum = index.length ; i < sum ; ++i ){
 				this.enemyList[index[i]].shape.destX = Math.ceil(Math.random()*(this.maxWidth-this.enemyList[index[i]].shape.destWidth));
 				enemy = this.enemyList[index[i]].deepClone();
@@ -321,8 +345,6 @@ GameControl.prototype = {
 			}
 		}
 	},levelControl : function(){	
-	},addDamage : function( obj , attack ){
-		obj.health -= attack;
 	},checkOverlap : function( arr1 , arr2 ){
 		if( arr1[1][0] < arr2[0][0] || arr1[1][1] < arr2[0][1] || arr1[0][0] > arr2[1][0] || arr1[0][1] > arr2[1][1] ){
 			return false;
@@ -446,8 +468,7 @@ $(function(){
 	},normalWeapon = {
 		bullet : normalBullet,
 		bulletSum : Infinity,
-		speed : 10
-	// 飞机
+		speed : 5
 	},playerAircraft = {
 		moveUp : false,
 		moveDown : false,
@@ -458,7 +479,7 @@ $(function(){
 		score : 0,
 		touchmove : false,
 		weapon : normalWeapon,
-		fly : (function(){
+		fly : function(){
 			var time , count;
 			time = count = 20;
 			return function(){
@@ -477,15 +498,13 @@ $(function(){
 					count = time
 				}
 			}
-		})(),
-		destroy : (function(){
+		},destroy : function(){
 			var time , count;
 			time = count = 20;
 			return function(){
 
 			}
-		})(),
-		control : function(){
+		},control : function(){
 			if( this.moveUp && this.shape.destY > 0 ){
 				this.shape.destY -= this.speed;
 			}
@@ -498,9 +517,6 @@ $(function(){
 			if( this.moveRight && this.shape.destX < canvasWidth - this.shape.destWidth ){
 				this.shape.destX += this.speed;
 			}
-
-
-
 			this.fly();
 			this.updataArea();
 			return this.attack.fire();
@@ -519,40 +535,14 @@ $(function(){
 		area : [[0,0],[0,0]]
 	},shape1Aircraft = {
 		health : 1,
-		speed : 7,
+		speed : 5,
 		score : 1000,
 		attack : 1,
-		fly : (function(){
-			return function(){
-				this.shape.sourceX = 535;
-				this.shape.sourceY = 610;
-			}
-		})(),damage : (function(){
-			var time , count;
-			time = count = 20;
-			return function(){
-				switch( count ){
-					case time :
-						this.shape.sourceX = 432;
-						this.shape.sourceY = 527;
-						break;
-					case time / 2 :
-						this.shape.sourceX = 0;
-						this.shape.sourceY = 2;
-						break;
-				}
-
-				--count;
-				if( count < 0 ){
-					count = time
-				}
-
-			};
-		})(),destroy : (function(){
+		destroy : function(){
 			var time,count;
 			time = count = 32;
 			return function(){
-				switch( count ){
+				switch( count ){ 
 					case time :
 						this.shape.sourceX = 268; // 268
 						this.shape.sourceY = 350; // 350
@@ -573,13 +563,9 @@ $(function(){
 					    this.die = true;
 						break;
 				}
-				--count;
-				if( count < 0 ){
-					count = time+1;
-				}		
+				--count;		
 			}
-		})(),
-		shape : {
+		},shape : {
 			image : shoot,
 			sourceX : 535, // 535
 			sourceY : 610, // 610
@@ -592,16 +578,11 @@ $(function(){
 		},size : [48*scale,45*scale],
 		area : [[0,0],[0,0]]
 	},shape2Aircraft = {
-		health : 5,
+		health : 3,
 		speed : 3,
 		score : 6000,
 		attack : 1,
-		fly : (function(){
-			return function(){
-				this.shape.sourceX = 0;
-				this.shape.sourceY = 2;
-			}
-		})(),damage : (function(){
+		damage : function(){
 			var time , count;
 			time = count = 20;
 			return function(){
@@ -620,9 +601,8 @@ $(function(){
 				if( count < 0 ){
 					count = time;
 				}
-
 			};
-		})(),destroy : (function(){
+		},destroy : function(){
 			var time,count;
 			time = count = 32;
 			return function(){
@@ -648,12 +628,8 @@ $(function(){
 					    break;
 				}
 				--count;
-				if( count < 0 ){
-					count = time + 1;
-				}
 			}
-		})(),
-		shape : {
+		},shape : {
 			image : shoot,
 			sourceX : 0, // 0
 			sourceY : 2, // 2
@@ -670,7 +646,7 @@ $(function(){
 		speed : 2,
 		score : 30000,
 		attack : 1,
-		fly : (function(){
+		fly : function(){
 			var time , count;
 			time = count = 20;
 			return function(){
@@ -684,13 +660,12 @@ $(function(){
 						this.shape.sourceY = 749;
 						break;
 				}
-
 				--count;
 				if( count < 0 ){
 					count = time;
 				}
 			}
-		})(),damage : (function(){
+		},damage : function(){
 			var time , count;
 			time = count = 8;
 			return function(){
@@ -704,14 +679,12 @@ $(function(){
 						this.shape.sourceY = 749;
 						break;
 				}
-
 				--count;
 				if( count < 0 ){
 					count = time
 				}
-
 			};
-		})(),destroy : (function(){
+		},destroy : function(){
 			var time,count;
 			time = count = 48;
 			return function(){
@@ -745,12 +718,8 @@ $(function(){
 						break;
 				}
 				--count;
-				if( count < 0 ){
-					count = time + 1;
-				}
 			}
-		})(),
-		shape : {
+		},shape : {
 			image : shoot,
 			sourceX : 338, // 338
 			sourceY : 749, // 749
@@ -798,4 +767,5 @@ $(function(){
 		animate();
 		$('#begin').hide();
 	});
+	$('#begin').click();
 });
