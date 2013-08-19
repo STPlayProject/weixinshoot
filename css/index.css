@@ -29,7 +29,6 @@ canvas{
 	color: #fff;
 	text-decoration: none;
 }
-
 @font-face{
 	font-family:"DIN Next W01 Bold";
 	src:url("font.woff") format('woff');

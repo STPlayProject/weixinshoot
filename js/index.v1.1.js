@@ -37,13 +37,6 @@ Array.prototype.del = function(n){
 		return this.slice( 0 , n ).concat( this.slice( n + 1 , this.length ) );
 	}
 };
-
-var createCanvas = function( width , height ){
-	var _canvas = document.createElement('canvas');
-	_canvas.width = width;
-	_canvas.height = height;
-	return _canvas;
-};
 var randomArea = function(init){
 	var x = Math.random(),
 		result = [],
@@ -60,12 +53,12 @@ var Aircraft = function(init){
 	for( var key in init ){
 		this[key] = init[key];
 	}
+	if( !this.attack ){
+		this.loadWeapon();
+	}
 	this.fly = this.fly();
 	this.damage = this.damage();
 	this.destroy = this.destroy();
-	this.weapon = [];
-	this.area = [[0,0],[0,0]];
-	this.loadWeapon();
 };
 Aircraft.prototype = {
 	health : 0,
@@ -73,7 +66,6 @@ Aircraft.prototype = {
 	score : 0,
 	die : false,
 	checkArea : true,
-	ownWeapon : null,
 	animateType : 'fly',
 	fly : function(){
 		return function(){};
@@ -82,32 +74,17 @@ Aircraft.prototype = {
 	},destroy : function(){
 		return function(){};
 	},loadWeapon : function(){
-		var i ,sum ,
-			weaponList = this.weaponList,
-			weapon = [];
-		
-		if( weaponList instanceof Array ){
-			if( weaponList.length == 0 ){
-				this.getOwnWeapon();
-			}
-			for( i = 0 , sum = weaponList.length ; i < sum ; ++i ){
-				weapon.push(new Weapon(weaponList[i].deepClone(),this));
-			}
-		}
-		this.weapon = weapon;
-		return this;
+		this.attack = new Weapon(this.weapon,this);
 	},remove : function(){
 		if( this.shape.destY > 1000 ){
 			this.die = true;
 		}
 		return this.die;
-	},move : function(){
-		this.shape.destY += this.speed;
 	},control : function(){
-		if( !this.isDied() ){
-			this.move();
-		}
 		this.updataArea();
+		if( !this.isDied() ){
+			this.shape.destY += this.speed;
+		}
 		this[this.animateType].call(this);
 		return null;
 	},isDied : function(){
@@ -130,33 +107,6 @@ Aircraft.prototype = {
 		this.area[1][0] = this.area[0][0] + this.size[0];
 		this.area[1][1] = this.area[0][1] + this.size[1];
 		return this;
-	},fire : function(){
-		var i , sum , 
-		weapon = this.weapon,
-		bullets = [];
-		for( i = 0 , sum = weapon.length ; i < sum ; ++i ){
-			if( !weapon[i].isEmpty() ){
-				bullets = bullets.concat( weapon[i].fire() );
-			}else{
-				this.weaponList = this.weaponList.del(i);
-				this.loadWeapon();
-			}
-		}
-		return bullets;
-	},weaponUpgrade : function(weaponObj,name){
-		var i , sum,
-			weaponList = this.weaponList;
-		for( i = 0 , sum = weaponList.length ; i < sum ; ++i ){
-			if( weaponList[i].name == name ){
-				weaponList[i] = weaponObj;
-			}
-		}
-		this.loadWeapon();
-	},addWeapon : function(weaponObj){
-		this.weaponList.push(weaponObj);
-		this.loadWeapon();
-	},getOwnWeapon : function(){
-		this.weaponList.push(this.ownWeapon);
 	}
 };
 var Weapon = function( init , airCraft ){
@@ -164,7 +114,6 @@ var Weapon = function( init , airCraft ){
 		this[key] = init[key];
 	}
 	this.airCraft = airCraft;
-	this.fire = null;
 	this.loadBullet();
 };
 Weapon.prototype = {
@@ -174,52 +123,42 @@ Weapon.prototype = {
 	speed : 0,
 	posX : 0,
 	posY : 0,
-	shiftX : 0,
-	shiftY : 0,
 	upgrade : function(init){
 		for( var key in init ){
 			this[key] = init[key];
 		}
 	},updataPos : function(){
 		var airCraftShape = this.airCraft.shape;
-		this.posX = airCraftShape.destX+this.shiftX;
-		this.posY = airCraftShape.destY+this.shiftY;
+		this.posX = airCraftShape.destX;
+		this.posY = airCraftShape.destY;
 		return this;
 	},loadBullet : function(){
 		this.fire = (function(speed,_this){
 			var time,count;
 			time = count = speed;
 			return function(){
-				var bulletList = [],
-					bulletObj = [];
-				
+				var bullet = null;
 				if( count != 0 ){
 					--count;
-					return [];
+					return null;
 				}else{
 					count = time;
-					if( _this.isEmpty() ){
-						return [];
+					if( _this.bulletSum == 0 ){
+						_this.bulletRunout();
+						return null;
 					}
 					--_this.bulletSum;
 					_this.updataPos();
-					bulletList = _this.bulletBeforeFire(_this.bullet.deepClone());
-					if( bulletList instanceof Array ){
-						for( i = 0 , sum = bulletList.length ; i < sum ; ++i ){
-							bulletObj.push(new Bullet(bulletList[i]));
-						}
-					}
-					return bulletObj;
+					_this.bullet.shape.destX = _this.posX+_this.airCraft.shape.destWidth/2;
+					_this.bullet.shape.destY = _this.posY-10;
+					return new Bullet(_this.bullet.deepClone());
 				}
-			};
+				
+			}
 		})(this.speed,this);
 	},bulletRunout : function(){
 		this.bullet = normalBullet;
 		this.bulletSum = Infinity;
-	},bulletBeforeFire : function(){
-		return [];
-	},isEmpty : function(){
-		return this.bulletSum <= 0;
 	}
 };
 var Bullet = function( init ){
@@ -227,31 +166,26 @@ var Bullet = function( init ){
 		this[key] = init[key];
 	}
 	this.area = [[0,0],[0,0]];
-	this.fly = this.fly();
-	this.damage = this.damage();
-	this.destroy = this.destroy();
 };
 Bullet.prototype = {
+	weapen : null,
 	speed : 0,
 	health : 0,
 	attack : 0,
 	die : false,
-	animateType : 'fly',
 	checkArea : true,
-	fly : function(){
-		return function(){};
-	},damage : function(){
-		return function(){};
-	},destroy : function(){
-		return function(){
-			this.die = true;
-		};
+	fly : function(){},
+	damage : function(){},
+	destroy : function(){
+		this.die = true;
 	},control : function(){
-		if( !this.isDied() ){
-			this.move();
-		}
 		this.updataArea();
-		this[this.animateType].call(this);
+		if( this.health > 0 ){
+			this.shape.destY -= this.speed;
+		}else{
+			this.checkArea = false;
+			this.destroy();
+		}
 		return null;
 	},getDamage : function( attack ){
 		this.health -= attack;
@@ -261,8 +195,6 @@ Bullet.prototype = {
 			this.die = true;
 		}
 		return this.die;
-	},move : function(){
-		this.shape.destY -= this.speed;
 	},updataArea : function(){
 		var x = (this.shape.destWidth - this.size[0])/2,
 			y = (this.shape.destHeight - this.size[1])/2;
@@ -271,87 +203,17 @@ Bullet.prototype = {
 		this.area[1][0] = this.area[0][0] + this.size[0];
 		this.area[1][1] = this.area[0][1] + this.size[1];
 		return this;
-	},isDied : function(){
-		if( this.health > 0 ){
-			return false;
-		}else{
-			this.animateType = 'destroy';
-			this.checkArea = false;
-			return true;
-		}
 	}
 };
-var Supply = function( init ){
-	for( var key in init ){
-		this[key] = init[key];
-	}
-	this.area = [[0,0],[0,0]];
-	this.fly = this.fly();
-	this.damage = this.damage();
-	this.destroy = this.destroy();
-};
-Supply.prototype = {
-	type : '', // upgrade、add
-	upgradeTarget : '',
-	value : null,
-	speed : 0,
-	health : 1,
-	die : false,
-	checkArea : true,
-	animateType : 'fly',
-	fly : function(){
-		return function(){};
-	},damage : function(){
-		return function(){};
-	},destroy : function(){
-		return function(){
-			this.die = true;
-		};
-	},remove : function(){
-		if( this.shape.destY > 1000 ){
-			this.die = true;
-		}
-		return this.die;
-	},control : function(){
-		if( !this.isDied() ){
-			this.move();
-		}
-		this.updataArea();
-		this[this.animateType].call(this);
-		return null;
-	},updataArea : function(){
-		var x = (this.shape.destWidth - this.size[0])/2,
-			y = (this.shape.destHeight - this.size[1])/2;
-		this.area[0][0] = x + this.shape.destX;
-		this.area[0][1] = y + this.shape.destY;
-		this.area[1][0] = this.area[0][0] + this.size[0];
-		this.area[1][1] = this.area[0][1] + this.size[1];
-		return this;
-	},move : function(){
-		this.shape.destY += this.speed;
-	},getSupply : function(){
-		return this.value.deepClone();
-	},isDied : function(){
-		if( this.health > 0 ){
-			return false;
-		}else{
-			this.animateType = 'destroy';
-			this.checkArea = false;
-			return true;
-		}
-	},getDamage : function( attack ){
-		this.health -= attack;
-		return this;
-	}
-};
-var GameControl = function( cxt , player , enemy , supply , width , height ){
+var GameControl = function( cxt , player , enemy , width , height ){
 	this.cxt = cxt;
 	this.player = new Aircraft(player);
 	this.enemyList = enemy;
-	this.supplyList = supply;
 	this.maxWidth = width;
 	this.maxHeight = height;
-	this._canvasBuffer = createCanvas( width , height );
+	this._canvasBuffer = document.createElement('canvas');
+	this._canvasBuffer.width = width;
+	this._canvasBuffer.height = height;
 	this._cxt = this._canvasBuffer.getContext('2d');
 	this.keyBoardEvet(this.player);
 };
@@ -362,10 +224,8 @@ GameControl.prototype = {
 	_cxt : null,
 	player : null,
 	enemyList : null,
-	supplyList : null,
 	bulletControlList : [],
 	enemyControlList : [],
-	supplyControlList : [],
 	animateList : [],
 	maxWidth : 0,
 	maxHeight : 0,
@@ -373,18 +233,12 @@ GameControl.prototype = {
 	score : 0,
 	push : function( obj , type ){
 		if( obj ){
-			var i ,sum;
 			switch(type){
-				case 'bullet' :
-					for( i = 0 , sum = obj.length ; i < sum ; ++i ){
-						this.bulletControlList.push(obj[i]);
-					}
+				case 'bullet' : 
+					this.bulletControlList.push(obj);
 					break;
 				case 'enemy' : 
 					this.enemyControlList.push(obj);
-					break;
-				case 'supply':
-					this.supplyControlList.push(obj);
 			}
 		}
 		return this;
@@ -407,16 +261,14 @@ GameControl.prototype = {
 		return this;
 	},control : function(){
 		var i , sum ,
-			enemyControlList = this.enemyControlList,
-			bulletControlList = this.bulletControlList,
-			supplyControlList = this.supplyControlList;
+			enemyControlList = this.enemyControlList;
+			bulletControlList = this.bulletControlList;
 		this.animateList = [];
 		if( this.player.remove() ){
 			//game over
 			//alert( 'game over' );
 		}
-		this.player.control();
-		this.push(this.player.fire(),'bullet');
+		this.push(this.player.control(),'bullet');
 		this.animateList.push(this.player.shape);
 
 
@@ -425,62 +277,48 @@ GameControl.prototype = {
 		while( i < sum ){
 			if( enemyControlList[i]['remove']() ){
 				this.score += enemyControlList[i].score;
-				this.enemyControlList = enemyControlList.del(i);
+				enemyControlList = enemyControlList.del(i);
+				sum -= 1;
+				if( i >= sum ){
+					break;
+				}
 			}
 			this.animateList.push(enemyControlList[i]['shape']);
 			enemyControlList[i]['control']();
 			++i;
 		}
 
+		this.enemyControlList = enemyControlList;
+
 		i = 0 , sum = bulletControlList.length;
 
 		while( i < sum ){
 			if( bulletControlList[i]['remove']() ){
-				this.bulletControlList = bulletControlList.del(i);
+				bulletControlList = bulletControlList.del(i);
+				sum -= 1;
+				if( i >= sum ){
+					break;
+				}
 			}
 			this.animateList.push(bulletControlList[i]['shape']);
 			bulletControlList[i]['control']();
 			++i;
 		}
-
-		i = 0 , sum = supplyControlList.length;
-
-		while( i < sum ){
-			if( supplyControlList[i]['remove']() ){
-				this.supplyControlList = supplyControlList.del(i);
-			}
-			this.animateList.push(supplyControlList[i]['shape']);
-			supplyControlList[i]['control']();
-			++i;
-		}
+		this.bulletControlList = bulletControlList;
 		
 		this.cheakDistance();
 		this.addEnemy();
-		this.addSupply();
 		this.showScore();
 	},cheakDistance : function(){
 		// check palyer and enemy
 		var i , sumi , j , sumj,
 			eAList = this.enemyControlList,
 			bAList = this.bulletControlList,
-			sAlList = this.supplyControlList,
 			player = this.player;
 
 		for( i = 0 , sumi = eAList.length ; i < sumi ; ++i ){
 			if( player.checkArea && eAList[i].checkArea && this.checkOverlap( player.area , eAList[i].area ) ){
 				player.getDamage( eAList[i].attack );
-			}
-		}
-
-		for( i = 0 , sumi = sAlList.length ; i < sumi ; ++i ){
-			if( player.checkArea && sAlList[i].checkArea && this.checkOverlap( player.area , sAlList[i].area ) ){
-				switch( sAlList[i].type ){
-					case 'upgrade' :
-						player.weaponUpgrade( sAlList[i].getSupply() , sAlList[i].upgradeTarget );
-						sAlList[i].getDamage(1);
-						break;
-				}
-				
 			}
 		}
 
@@ -505,11 +343,6 @@ GameControl.prototype = {
 				enemy = this.enemyList[index[i]].deepClone();
 				this.push( new Aircraft(enemy) , 'enemy' );
 			}
-		}
-	},addSupply : function(){
-		if( Math.random() < 0.001 ){
-			this.supplyList[0].shape.destX = Math.ceil(Math.random()*(this.maxWidth-this.supplyList[0].shape.destWidth))
-			this.push( new Supply(this.supplyList[0].deepClone()) , 'supply' );
 		}
 	},levelControl : function(){	
 	},checkOverlap : function( arr1 , arr2 ){
@@ -575,6 +408,7 @@ GameControl.prototype = {
 		$(window).on('touchend',function(e){
 			obj.touchmove = false;
 		});
+
 	},showScore : function(){
 		this.$score.html(this.score);
 	}
@@ -614,13 +448,12 @@ $(function(){
 			sourceHeight : 22,
 			destX : 0,
 			destY : 0,
-			destWidth : 10,
-			destHeight : 22
-		},size : [10,18]
+			destWidth : 10 * scale,
+			destHeight : 22 * scale
+		},size : [10*scale,18*scale]
 	},blueBullet = {
-		speed : 20,
+		speed : 10,
 		attack : 3,
-		health : 1,
 		shape : {
 			image : shoot,
 			sourceX : 69,
@@ -629,118 +462,24 @@ $(function(){
 			sourceHeight : 22,
 			destX : 0,
 			destY : 0,
-			destWidth : 10,
-			destHeight : 22
-		},size : [10,22]
-	},trackingMissiles = {
-		speed : 10,
-		attack : 1,
-		health : 1,
-		fly : function(){
-			var time , count;
-			time = count = 20;
-			return function(){
-				switch( count ){
-					case time :
-						this.shape.sourceX = 115;
-						this.shape.sourceY = 37;
-						break;
-					case time / 2 :
-						this.shape.sourceX = 99;
-						this.shape.sourceY = 37;
-						break;
-				}
-				--count;
-				if( count < 0 ){
-					count = time
-				}
-			}
-		},shape : {
-			image : shoot,
-			sourceX : 99,
-			sourceY : 37,
-			sourceWidth : 15,
-			sourceHeight : 51,
-			destX : 0,
-			destY : 0,
-			destWidth : 15,
-			destHeight : 51
-		},size : [15,51]
+			destWidth : 10 * scale,
+			destHeight : 22 * scale
+		},size : [10*scale,22*scale]
 	},normalWeapon = {
-		name : 'normalWeapon',
 		bullet : normalBullet,
 		bulletSum : Infinity,
-		speed : 5,
-		shiftX : 50,
-		shiftY : -10,
-		bulletBeforeFire : function(bullet){
-			bullet.shape.destX = this.posX;
-			bullet.shape.destY = this.posY;
-			return [bullet];
-		}
-	},doubleBulletWeapon = {
-		name : 'doubleBulletWeapon',
-		bullet : blueBullet,
-		bulletSum : 100,
-		speed : 5,
-		shiftX : 50,
-		shiftY : -10,
-		bulletBeforeFire : function(bullet){
-			var bullet1 = bullet.deepClone(),
-				bullet2 = bullet.deepClone();
-			bullet1.shape.destX = this.posX-30;
-			bullet1.shape.destY = this.posY+20;
-			bullet2.shape.destX = this.posX+30;
-			bullet2.shape.destY = this.posY+20;
-			return [bullet1,bullet2];
-		}
-	},trackingMissilesWeapon = {
-		name : 'trackingMissilesWeapon',
-		bullet : trackingMissiles,
-		bulletSum : Infinity,
-		speed : 40,
-		shiftX : 50,
-		shiftY : -10,
-		bulletBeforeFire : function(bullet){
-			var bullet1 = bullet.deepClone(),
-				bullet2 = bullet.deepClone();
-			bullet1.shape.destX = this.posX-36;
-			bullet1.shape.destY = this.posY+30;
-			bullet2.shape.destX = this.posX+30;
-			bullet2.shape.destY = this.posY+30;
-			return [bullet1,bullet2];
-		}
+		speed : 5
 	},playerAircraft = {
 		moveUp : false,
 		moveDown : false,
 		moveleft : false,
 		moveRight : false,
-		health : Infinity,
+		health : 1,
 		speed : 6,
 		score : 0,
 		touchmove : false,
-		ownWeapon : normalWeapon,
-		weaponList : [normalWeapon],
+		weapon : normalWeapon,
 		fly : function(){
-			var time , count;
-			time = count = 20;
-			return function(){
-				switch( count ){
-					case time :
-						this.shape.sourceX = 165;
-						this.shape.sourceY = 360;
-						break;
-					case time / 2 :
-						this.shape.sourceX = 0;
-						this.shape.sourceY = 99;
-						break;
-				}
-				--count;
-				if( count < 0 ){
-					count = time
-				}
-			}
-		},damage : function(){
 			var time , count;
 			time = count = 20;
 			return function(){
@@ -763,8 +502,9 @@ $(function(){
 			var time , count;
 			time = count = 20;
 			return function(){
+
 			}
-		},move : function(){
+		},control : function(){
 			if( this.moveUp && this.shape.destY > 0 ){
 				this.shape.destY -= this.speed;
 			}
@@ -777,6 +517,9 @@ $(function(){
 			if( this.moveRight && this.shape.destX < canvasWidth - this.shape.destWidth ){
 				this.shape.destX += this.speed;
 			}
+			this.fly();
+			this.updataArea();
+			return this.attack.fire();
 		},
 		shape : {
 			image : shoot,
@@ -786,9 +529,10 @@ $(function(){
 			sourceHeight : 120,
 			destX : canvasWidth / 2 - 50,
 			destY : canvasHeight - 150,
-			destWidth : 100,
-			destHeight : 120
-		},size : [40,120]
+			destWidth : 100*scale,
+			destHeight : 120*scale
+		},size : [40*scale,120*scale],
+		area : [[0,0],[0,0]]
 	},shape1Aircraft = {
 		health : 1,
 		speed : 5,
@@ -829,11 +573,12 @@ $(function(){
 			sourceHeight : 45,
 			destX : 0,
 			destY : -100,
-			destWidth : 56, 
-			destHeight : 45,
-		},size : [48,45]
+			destWidth : 56*scale, 
+			destHeight : 45*scale,
+		},size : [48*scale,45*scale],
+		area : [[0,0],[0,0]]
 	},shape2Aircraft = {
-		health : 10,
+		health : 3,
 		speed : 3,
 		score : 6000,
 		attack : 1,
@@ -892,11 +637,12 @@ $(function(){
 			sourceHeight : 93,
 			destX : 0,
 			destY : -100,
-			destWidth : 69, 
-			destHeight : 93,
-		},size : [69,93]
+			destWidth : 69*scale, 
+			destHeight : 93*scale,
+		},size : [69*scale,93*scale],
+		area : [[0,0],[0,0]]
 	},shape3Aircraft = {
-		health : 30,
+		health : 10,
 		speed : 2,
 		score : 30000,
 		attack : 1,
@@ -981,35 +727,18 @@ $(function(){
 			sourceHeight : 256,
 			destX : 0,
 			destY : -300,
-			destWidth : 164, 
-			destHeight : 256,
-		},size : [164,256]
-	},supplyBlueBullet = {
-		type : 'upgrade', // upgrade、add
-		upgradeTarget : 'normalWeapon',
-		value : doubleBulletWeapon,
-		speed : 10,
-		shape : {
-			image : shoot,
-			sourceX : 266,
-			sourceY : 398,
-			sourceWidth : 57,
-			sourceHeight : 86,
-			destX : 0,
-			destY : -100,
-			destWidth : 57,
-			destHeight : 86
-		},size : [57,86]
+			destWidth : 164*scale, 
+			destHeight : 256*scale,
+		},size : [164*scale,256*scale],
+		area : [[0,0],[0,0]]
 	};
 	var player = playerAircraft,
 	enemylist = [
 		shape1Aircraft,
 		shape2Aircraft,
 		shape3Aircraft
-	],supplyList = [
-		supplyBlueBullet
 	],
-	gameControl = new GameControl(cxt,player,enemylist,supplyList,canvasWidth,canvasHeight);
+	gameControl = new GameControl(cxt,player,enemylist,canvasWidth,canvasHeight);
 	
 
 
@@ -1020,12 +749,10 @@ $(function(){
 
 		shootBackgroundPosY = 0,
 
-		draw = function(obj){
-			cxt.drawImage( obj.image , obj.sourceX , obj.sourceY , obj.sourceWidth , obj.sourceHeight , obj.destX , obj.destY , obj.destWidth , obj.destHeight );
-		},animate = function(){
+
+		animate = function(){
 			cxt.clearRect( 0 , 0 , canvasWidth , canvasHeight );
 			drawBackground();
-			//draw( supplyBlueBullet.shape );
 			gameControl.draw();
 			if( playAnimation ){
 				setTimeout( animate , 1000 / FPS );
@@ -1040,5 +767,5 @@ $(function(){
 		animate();
 		$('#begin').hide();
 	});
-	$('#begin').click(); 
+	$('#begin').click();
 });
